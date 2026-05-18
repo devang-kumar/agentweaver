@@ -1,0 +1,21 @@
+# Use lightweight python base image
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Copy python dependencies and install
+COPY generated/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy all generated model backend files
+COPY generated/ ./
+
+# Expose FastAPI default port
+EXPOSE 8000
+
+# Set environment variables for production database connections
+ENV MONGO_URI=mongodb://mongodb:27017/
+ENV MODEL_PATH=model/model.pkl
+
+# Start Uvicorn production server
+CMD ["python", "api_app/main.py"]

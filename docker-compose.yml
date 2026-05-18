@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 1. MongoDB Database Cluster for persistence
+  mongodb:
+    image: mongo:6.0
+    container_name: agentweaver_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+
+  # 2. Python FastAPI backend server (port 8000)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: agentweaver_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/
+    depends_on:
+      - mongodb
+    restart: always
+
+  # 3. Nginx serving the static built React application (port 80)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agentweaver_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  mongo_data:
