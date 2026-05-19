@@ -405,7 +405,7 @@ export default function Pipeline() {
         {stages.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: 24 }}>
             {/* Stage List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: 700, overflowY: 'auto', paddingRight: 8 }}>
               {stages.map((stage, idx) => {
                 const status = getStageStatus(idx);
                 const tasks = stageTasks[stage.id] || [];
@@ -417,13 +417,21 @@ export default function Pipeline() {
                   <motion.div
                     key={stage.id}
                     initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.04 }}
+                    animate={
+                      status === 'running' 
+                        ? { opacity: 1, x: 0, scale: 1.02, boxShadow: `0 0 25px ${color}30` }
+                        : { opacity: 1, x: 0, scale: 1, boxShadow: 'none' }
+                    }
+                    transition={{ 
+                      opacity: { delay: idx * 0.04 },
+                      x: { delay: idx * 0.04 },
+                      scale: { type: "spring", stiffness: 300, damping: 20 }
+                    }}
                     className="glass-card"
                     style={{
                       overflow: 'hidden',
-                      borderColor: status === 'running' ? `${color}40` : 'var(--border-subtle)',
-                      boxShadow: status === 'running' ? `0 0 20px ${color}15` : 'none',
+                      borderColor: status === 'running' ? `${color}50` : 'var(--border-subtle)',
+                      borderWidth: status === 'running' ? 2 : 1,
                     }}
                   >
                     <div
@@ -589,7 +597,7 @@ export default function Pipeline() {
               <div style={{
                 flex: 1, overflow: 'auto', padding: '10px 14px',
                 fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
-                background: 'rgba(0,0,0,0.3)',
+                background: 'var(--bg-tertiary)',
               }}>
                 {logs.length === 0 && (
                   <div style={{ color: 'var(--text-tertiary)', padding: 20, textAlign: 'center', fontSize: '0.75rem' }}>

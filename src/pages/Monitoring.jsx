@@ -97,7 +97,7 @@ const defaultFeatures = [
 ];
 
 export default function Monitoring() {
-  const { latestResults } = usePipeline();
+  const { latestResults, activePipeline, codeGenStatus } = usePipeline();
 
   const [serverState, setServerState] = useState('checking'); // 'checking' | 'connected' | 'disconnected'
   const [serverInfo, setServerInfo] = useState(null);
@@ -107,6 +107,8 @@ export default function Monitoring() {
   const [featuresList, setFeaturesList] = useState([]);
   const [targetName, setTargetName] = useState('Target');
   const [isClassifier, setIsClassifier] = useState(true);
+  const [playgroundUpdated, setPlaygroundUpdated] = useState(false);
+  const [lastPipelineId, setLastPipelineId] = useState(null);
 
   // Prediction serving states
   const [loading, setLoading] = useState(false);
@@ -150,7 +152,11 @@ export default function Monitoring() {
                 let max = 100;
                 let step = 1;
                 
-                if (prop.type === 'number' || prop.type === 'integer') {
+                // Special handling for Highest_Qualified_Member
+                if (key === 'Highest_Qualified_Member') {
+                  type = 'select';
+                  options = ['Illiterate', 'Under-Graduate', 'Graduate', 'Post-Graduate', 'Professional'];
+                } else if (prop.type === 'number' || prop.type === 'integer') {
                   type = 'number';
                   const lowerKey = key.toLowerCase();
                   if (lowerKey.includes('income')) {
@@ -185,7 +191,11 @@ export default function Monitoring() {
                 if (type === 'number') {
                   defaultValue = prop.default ?? prop.example ?? Math.round((min + max) / 2);
                 } else if (type === 'select') {
-                  defaultValue = prop.default ?? prop.example ?? options[0] ?? '';
+                  if (key === 'Highest_Qualified_Member') {
+                    defaultValue = 'Graduate';
+                  } else {
+                    defaultValue = prop.default ?? prop.example ?? options[0] ?? '';
+                  }
                 } else {
                   defaultValue = prop.default ?? prop.example ?? '';
                 }
@@ -236,6 +246,15 @@ export default function Monitoring() {
               value: f.default ?? (f.type === 'number' ? Math.round((f.min + f.max) / 2) : (f.options?.[0] || ''))
             }));
             setFeaturesList(specs);
+            
+            // Check if this is a new pipeline
+            const currentPipelineId = activePipeline?.id;
+            if (currentPipelineId && currentPipelineId !== lastPipelineId) {
+              setPlaygroundUpdated(true);
+              setLastPipelineId(currentPipelineId);
+              // Auto-hide the notification after 5 seconds
+              setTimeout(() => setPlaygroundUpdated(false), 5000);
+            }
             return;
           }
         } else {
@@ -248,6 +267,15 @@ export default function Monitoring() {
           }));
           setFeaturesList(mapped);
           setTargetName(isClass ? 'Prediction Class' : 'Target Value');
+          
+          // Check if this is a new pipeline
+          const currentPipelineId = activePipeline?.id;
+          if (currentPipelineId && currentPipelineId !== lastPipelineId) {
+            setPlaygroundUpdated(true);
+            setLastPipelineId(currentPipelineId);
+            // Auto-hide the notification after 5 seconds
+            setTimeout(() => setPlaygroundUpdated(false), 5000);
+          }
           return;
         }
       }
@@ -259,7 +287,7 @@ export default function Monitoring() {
     };
 
     loadDynamicFeatures();
-  }, [serverState, latestResults, serverInfo]);
+  }, [serverState, latestResults, serverInfo, activePipeline?.id, lastPipelineId]);
 
   const updateFeatureValue = (name, val) => {
     setFeaturesList(prev => {
@@ -323,10 +351,21 @@ export default function Monitoring() {
     featuresList.forEach(f => {
       if (f.type === 'number') {
         payload[f.name] = parseFloat(f.value);
+      } else if (f.type === 'select') {
+        // For select fields, check if options are numbers (like No_of_Fly_Members)
+        if (f.options && typeof f.options[0] === 'number') {
+          payload[f.name] = parseFloat(f.value);
+        } else {
+          // For string options (like Highest_Qualified_Member), use the value directly
+          payload[f.name] = f.value;
+        }
       } else {
         payload[f.name] = f.value;
       }
     });
+
+    // Debug log to see what we're sending
+    console.log('Sending payload:', payload);
 
     try {
       const res = await fetch('http://localhost:8000/predict', {
@@ -406,6 +445,170 @@ export default function Monitoring() {
           </div>
         </div>
 
+        {/* Pipeline Running Status & Dynamic Playground */}
+        {activePipeline && activePipeline.status === 'running' && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, scale: 0.95 }} 
+            animate={{ opacity: 1, y: 0, scale: 1 }} 
+            transition={{ 
+              type: "spring", 
+              stiffness: 300, 
+              damping: 30,
+              duration: 0.6
+            }}
+            className="glass-card pipeline-running-banner" 
+            style={{ 
+              padding: 28, 
+              marginBottom: 32, 
+              borderColor: 'rgba(139,92,246,0.4)', 
+              background: 'linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(167,139,250,0.08) 100%)',
+              boxShadow: '0 8px 32px rgba(139,92,246,0.2), 0 0 0 1px rgba(139,92,246,0.15)',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Animated background gradient */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(45deg, transparent 30%, rgba(139,92,246,0.05) 50%, transparent 70%)',
+              animation: 'shimmer 3s ease-in-out infinite',
+              backgroundSize: '200% 200%'
+            }} />
+            
+            {/* Floating particles */}
+            <div style={{ position: 'absolute', top: '20%', left: '10%', width: 4, height: 4, borderRadius: '50%', background: '#8b5cf6', opacity: 0.4, animation: 'float 4s ease-in-out infinite' }} />
+            <div style={{ position: 'absolute', top: '60%', right: '15%', width: 6, height: 6, borderRadius: '50%', background: '#a78bfa', opacity: 0.3, animation: 'float 3s ease-in-out infinite 1s' }} />
+            <div style={{ position: 'absolute', bottom: '30%', left: '80%', width: 3, height: 3, borderRadius: '50%', background: '#8b5cf6', opacity: 0.5, animation: 'float 5s ease-in-out infinite 2s' }} />
+            
+            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+              <motion.div 
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                style={{ 
+                  width: 56, 
+                  height: 56, 
+                  borderRadius: 16, 
+                  background: 'linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(167,139,250,0.2) 100%)', 
+                  border: '2px solid rgba(139,92,246,0.4)',
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: '0 8px 25px rgba(139,92,246,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+                  position: 'relative'
+                }}
+              >
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                >
+                  <Sparkles size={28} color="#8b5cf6" />
+                </motion.div>
+                
+                {/* Pulsing ring */}
+                <div style={{
+                  position: 'absolute',
+                  inset: -8,
+                  borderRadius: '50%',
+                  border: '2px solid rgba(139,92,246,0.4)',
+                  animation: 'pulse-ring 2s ease-out infinite'
+                }} />
+              </motion.div>
+              
+              <div style={{ flex: 1 }}>
+                <motion.h4 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 }}
+                  style={{ 
+                    fontWeight: 800, 
+                    marginBottom: 8, 
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    fontSize: '1.1rem'
+                  }}
+                >
+                  🚀 Pipeline Running - New Model Playground Available!
+                </motion.h4>
+                
+                <motion.p 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 }}
+                  style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 16 }}
+                >
+                  A new ML pipeline is currently running for <strong>"{activePipeline.config?.domain || 'your problem'}"</strong>. 
+                  {codeGenStatus === 'generating' && ' ⚡ Code generation is in progress...'}
+                  {codeGenStatus === 'done' && ' ✨ The model playground below has been updated with the new features and target variables.'}
+                  {codeGenStatus === 'idle' && ' 🔄 The playground will update automatically once the model is ready.'}
+                </motion.p>
+                
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}
+                >
+                  {[
+                    { label: 'Domain', value: activePipeline.results?.domain || 'General', color: '#8b5cf6' },
+                    { label: 'Type', value: activePipeline.results?.problemType || 'Classification', color: '#a78bfa' },
+                    { 
+                      label: 'Status', 
+                      value: codeGenStatus === 'generating' ? '⏳ Generating Code...' :
+                             codeGenStatus === 'done' ? '✅ Model Ready' :
+                             codeGenStatus === 'idle' ? '🔄 Preparing...' :
+                             codeGenStatus === 'no_key' ? '🔑 API Key Required' : '❌ Generation Failed',
+                      color: codeGenStatus === 'generating' ? '#fbbf24' : 
+                             codeGenStatus === 'done' ? '#10b981' : '#8b5cf6'
+                    }
+                  ].map((item, idx) => (
+                    <motion.div
+                      key={item.label}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.6 + idx * 0.1, type: "spring", stiffness: 200 }}
+                      style={{ 
+                        padding: '6px 14px', 
+                        borderRadius: 'var(--radius-full)',
+                        background: `linear-gradient(135deg, ${item.color}15 0%, ${item.color}08 100%)`, 
+                        border: `1px solid ${item.color}30`,
+                        fontSize: '0.75rem', 
+                        fontWeight: 600,
+                        color: item.color,
+                        boxShadow: `0 2px 8px ${item.color}20`,
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <span style={{ position: 'relative', zIndex: 1 }}>
+                        <strong>{item.label}:</strong> {item.value}
+                      </span>
+                      {codeGenStatus === 'generating' && item.label === 'Status' && (
+                        <div style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: '-100%',
+                          width: '100%',
+                          height: '100%',
+                          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                          animation: 'shimmer 2s ease-in-out infinite'
+                        }} />
+                      )}
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* Offline Alert Details */}
         {serverState === 'disconnected' && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ padding: 24, marginBottom: 28, borderColor: 'rgba(225,112,85,0.3)', background: 'rgba(225,112,85,0.04)' }}>
@@ -429,52 +632,296 @@ export default function Monitoring() {
         )}
 
         {/* Serving Playground */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 28 }}>
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28, marginBottom: 32 }}
+        >
           
           {/* Prediction Input Form */}
-          <div className="glass-card" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-              <Cpu size={18} color="var(--accent-primary-light)" />
-              <h4 style={{ fontWeight: 700 }}>Prediction Playground</h4>
+          <motion.div 
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
+            className="glass-card playground-card" 
+            style={{ 
+              padding: 28,
+              borderColor: activePipeline && activePipeline.status === 'running' ? 'rgba(139,92,246,0.4)' : 'var(--border-subtle)',
+              background: activePipeline && activePipeline.status === 'running' ? 
+                'linear-gradient(135deg, rgba(139,92,246,0.05) 0%, rgba(167,139,250,0.03) 100%)' : 'var(--bg-elevated)',
+              boxShadow: activePipeline && activePipeline.status === 'running' ? 
+                '0 8px 32px rgba(139,92,246,0.15), 0 0 0 1px rgba(139,92,246,0.1)' : 'var(--shadow-lg)',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Animated border gradient for active pipeline */}
+            {activePipeline && activePipeline.status === 'running' && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 2,
+                background: 'linear-gradient(90deg, #8b5cf6, #a78bfa, #8b5cf6)',
+                backgroundSize: '200% 100%',
+                animation: 'shimmer 3s ease-in-out infinite'
+              }} />
+            )}
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, position: 'relative', zIndex: 1 }}>
+              <motion.div
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300 }}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(167,139,250,0.15) 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid rgba(108,92,231,0.2)'
+                }}
+              >
+                <Cpu size={20} color="var(--accent-primary-light)" />
+              </motion.div>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  Prediction Playground
+                  <AnimatePresence>
+                    {activePipeline && activePipeline.status === 'running' && (
+                      <motion.span 
+                        initial={{ opacity: 0, scale: 0.5, x: -10 }}
+                        animate={{ opacity: 1, scale: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.5, x: -10 }}
+                        transition={{ type: "spring", stiffness: 300 }}
+                        style={{ 
+                          fontSize: '0.7rem', 
+                          padding: '3px 10px', 
+                          borderRadius: 'var(--radius-full)',
+                          background: 'linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(167,139,250,0.2) 100%)', 
+                          color: '#8b5cf6',
+                          fontWeight: 700,
+                          border: '1px solid rgba(139,92,246,0.4)',
+                          boxShadow: '0 2px 8px rgba(139,92,246,0.3)',
+                          animation: 'glow-pulse 2s ease-in-out infinite'
+                        }}
+                      >
+                        UPDATED
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </h4>
+              </div>
             </div>
 
-            <form onSubmit={handlePredict} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px' }}>
+            <AnimatePresence>
+              {playgroundUpdated && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }} 
+                  animate={{ opacity: 1, scale: 1, y: 0 }} 
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  style={{ 
+                    padding: 18, 
+                    marginBottom: 20, 
+                    borderRadius: 'var(--radius-md)', 
+                    background: 'linear-gradient(135deg, rgba(0,184,148,0.08) 0%, rgba(16,185,129,0.05) 100%)', 
+                    border: '1px solid rgba(0,184,148,0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    boxShadow: '0 4px 20px rgba(0,184,148,0.1)'
+                  }}
+                >
+                  <motion.div
+                    initial={{ scale: 0, rotate: -180 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+                  >
+                    <CheckCircle2 size={22} color="#00b894" />
+                  </motion.div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#00b894', marginBottom: 3 }}>
+                      🎉 Playground Updated!
+                    </div>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: 0, lineHeight: 1.4 }}>
+                      Features and target variables have been automatically configured for the new <strong>"{activePipeline?.results?.domain || 'ML'}"</strong> pipeline.
+                    </p>
+                  </div>
+                  <motion.button 
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setPlaygroundUpdated(false)}
+                    style={{ 
+                      background: 'transparent', 
+                      border: 'none', 
+                      cursor: 'pointer', 
+                      color: 'var(--text-tertiary)',
+                      fontSize: '1.2rem',
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  >
+                    ×
+                  </motion.button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {activePipeline && activePipeline.status === 'running' && codeGenStatus !== 'done' && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  style={{ 
+                    padding: 18, 
+                    marginBottom: 20, 
+                    borderRadius: 'var(--radius-md)', 
+                    background: 'linear-gradient(135deg, rgba(253,203,110,0.08) 0%, rgba(245,158,11,0.05) 100%)', 
+                    border: '1px solid rgba(253,203,110,0.2)',
+                    textAlign: 'center',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 10 }}>
+                    <motion.div 
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                      style={{ 
+                        width: 18, 
+                        height: 18, 
+                        border: '2px solid #fdcb6e', 
+                        borderTopColor: 'transparent', 
+                        borderRadius: '50%' 
+                      }} 
+                    />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fdcb6e' }}>
+                      ⚡ Updating playground for new pipeline...
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: 0, lineHeight: 1.4 }}>
+                    Features and target variables will be automatically configured once the model is ready.
+                  </p>
+                  
+                  {/* Animated progress bar */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    height: 2,
+                    background: '#fdcb6e',
+                    borderRadius: '0 0 var(--radius-md) var(--radius-md)',
+                    animation: 'shimmer 2s ease-in-out infinite',
+                    width: '60%'
+                  }} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <form onSubmit={handlePredict} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px 24px' }}
+              >
                 {featuresList.map((f, idx) => (
-                  <div 
-                    key={f.name} 
+                  <motion.div 
+                    key={f.name}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 + idx * 0.05, type: "spring", stiffness: 200 }}
                     style={{ 
                       display: 'flex', 
                       flexDirection: 'column',
                       gridColumn: (idx === featuresList.length - 1 && featuresList.length % 2 !== 0) ? 'span 2' : 'span 1'
                     }}
                   >
-                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 6 }}>
+                    <label style={{ 
+                      display: 'block', 
+                      fontSize: '0.75rem', 
+                      fontWeight: 700, 
+                      color: 'var(--text-tertiary)', 
+                      textTransform: 'uppercase', 
+                      letterSpacing: '0.05em',
+                      marginBottom: 8,
+                      transition: 'color var(--transition-fast)'
+                    }}>
                       {f.label}
                     </label>
                     
                     {f.type === 'select' ? (
-                      <select
+                      <motion.select
+                        whileFocus={{ scale: 1.02 }}
                         value={f.value}
                         onChange={(e) => updateFeatureValue(f.name, e.target.value)}
                         disabled={serverState !== 'connected'}
-                        style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
+                        style={{ 
+                          width: '100%', 
+                          padding: '12px 14px', 
+                          background: 'var(--bg-tertiary)', 
+                          border: '2px solid var(--border-subtle)', 
+                          borderRadius: 'var(--radius-md)', 
+                          color: 'var(--text-primary)', 
+                          outline: 'none',
+                          fontSize: '0.85rem',
+                          fontWeight: 500,
+                          transition: 'all var(--transition-base)',
+                          cursor: 'pointer'
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary-light)'}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--border-subtle)'}
                       >
-                        {f.options?.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
+                        {f.options?.map((opt, idx) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
                         ))}
-                      </select>
+                      </motion.select>
                     ) : (
-                      <>
-                        <input
+                      <div style={{ position: 'relative' }}>
+                        <motion.input
+                          whileFocus={{ scale: 1.02 }}
                           type="number"
                           value={f.value}
                           onChange={(e) => updateFeatureValue(f.name, Number(e.target.value))}
                           disabled={serverState !== 'connected'}
-                          style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
+                          style={{ 
+                            width: '100%', 
+                            padding: '12px 14px', 
+                            background: 'var(--bg-tertiary)', 
+                            border: '2px solid var(--border-subtle)', 
+                            borderRadius: 'var(--radius-md)', 
+                            color: 'var(--text-primary)', 
+                            outline: 'none',
+                            fontSize: '0.85rem',
+                            fontWeight: 500,
+                            transition: 'all var(--transition-base)'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.borderColor = 'var(--accent-primary-light)';
+                            e.target.style.boxShadow = '0 0 0 3px rgba(139,92,246,0.15)';
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.borderColor = 'var(--border-subtle)';
+                            e.target.style.boxShadow = 'none';
+                          }}
                         />
                         {f.min !== undefined && f.max !== undefined && (
-                          <input
+                          <motion.input
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.6 + idx * 0.05 }}
                             type="range"
                             min={f.min}
                             max={f.max}
@@ -482,32 +929,219 @@ export default function Monitoring() {
                             value={f.value}
                             onChange={(e) => updateFeatureValue(f.name, Number(e.target.value))}
                             disabled={serverState !== 'connected'}
-                            style={{ width: '100%', marginTop: 8, accentColor: 'var(--accent-primary)' }}
+                            style={{ 
+                              width: '100%', 
+                              marginTop: 10, 
+                              accentColor: 'var(--accent-primary)',
+                              height: 6,
+                              borderRadius: 3,
+                              background: 'var(--bg-tertiary)',
+                              outline: 'none',
+                              cursor: 'pointer'
+                            }}
                           />
                         )}
-                      </>
+                        
+                        {/* Value indicator */}
+                        <div style={{
+                          position: 'absolute',
+                          top: -8,
+                          right: 8,
+                          fontSize: '0.7rem',
+                          color: 'var(--accent-primary-light)',
+                          fontWeight: 600,
+                          background: 'rgba(139,92,246,0.15)',
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          opacity: 0.8
+                        }}>
+                          {typeof f.value === 'number' ? f.value.toLocaleString() : f.value}
+                        </div>
+                      </div>
                     )}
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
+              </motion.div>
 
-              <button
+              <motion.button
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7, type: "spring", stiffness: 200 }}
+                whileHover={{ 
+                  scale: 1.02, 
+                  boxShadow: '0 8px 30px rgba(139,92,246,0.5)' 
+                }}
+                whileTap={{ scale: 0.98 }}
                 type="submit"
                 className="btn btn-primary"
                 disabled={serverState !== 'connected' || loading}
-                style={{ width: '100%', marginTop: 12, height: 42 }}
+                style={{ 
+                  width: '100%', 
+                  marginTop: 16, 
+                  height: 48,
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  background: loading ? 
+                    'linear-gradient(135deg, rgba(139,92,246,0.7) 0%, rgba(167,139,250,0.7) 100%)' :
+                    'linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%)',
+                  border: 'none',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
               >
-                {loading ? 'Running Inference...' : <><Sparkles size={16} /> Run {isClassifier ? 'Classification' : 'Regression'} Inference</>}
-              </button>
+                {loading && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: '-100%',
+                    width: '100%',
+                    height: '100%',
+                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                    animation: 'shimmer 2s ease-in-out infinite'
+                  }} />
+                )}
+                
+                <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {loading ? (
+                    <>
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                      >
+                        <Sparkles size={18} />
+                      </motion.div>
+                      Running Inference...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={18} /> 
+                      Run {isClassifier ? 'Classification' : 'Regression'} Inference
+                    </>
+                  )}
+                </span>
+              </motion.button>
             </form>
-          </div>
+          </motion.div>
 
           {/* Inference Output / Results Card */}
-          <div className="glass-card" style={{ padding: 24, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-              <Activity size={18} color="#00b894" />
-              <h4 style={{ fontWeight: 700 }}>Inference Output</h4>
+          <motion.div 
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.4, type: "spring", stiffness: 200 }}
+            className="glass-card inference-output-card" 
+            style={{ 
+              padding: 28, 
+              display: 'flex', 
+              flexDirection: 'column',
+              borderColor: activePipeline && activePipeline.status === 'running' ? 'rgba(139,92,246,0.4)' : 'var(--border-subtle)',
+              background: activePipeline && activePipeline.status === 'running' ? 
+                'linear-gradient(135deg, rgba(139,92,246,0.05) 0%, rgba(167,139,250,0.03) 100%)' : 'var(--bg-elevated)',
+              boxShadow: activePipeline && activePipeline.status === 'running' ? 
+                '0 8px 32px rgba(139,92,246,0.15), 0 0 0 1px rgba(139,92,246,0.1)' : 'var(--shadow-lg)',
+              position: 'relative',
+              overflow: 'hidden',
+              minHeight: 400
+            }}
+          >
+            {/* Animated border gradient for active pipeline */}
+            {activePipeline && activePipeline.status === 'running' && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 2,
+                background: 'linear-gradient(90deg, #00b894, #10b981, #00b894)',
+                backgroundSize: '200% 100%',
+                animation: 'shimmer 3s ease-in-out infinite'
+              }} />
+            )}
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, position: 'relative', zIndex: 1 }}>
+              <motion.div
+                whileHover={{ scale: 1.1, rotate: -5 }}
+                transition={{ type: "spring", stiffness: 300 }}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, rgba(0,184,148,0.15) 0%, rgba(16,185,129,0.1) 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid rgba(0,184,148,0.2)'
+                }}
+              >
+                <Activity size={20} color="#00b894" />
+              </motion.div>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  Inference Output
+                  <AnimatePresence>
+                    {activePipeline && activePipeline.status === 'running' && (
+                      <motion.span 
+                        initial={{ opacity: 0, scale: 0.5, x: -10 }}
+                        animate={{ opacity: 1, scale: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.5, x: -10 }}
+                        transition={{ type: "spring", stiffness: 300 }}
+                        style={{ 
+                          fontSize: '0.7rem', 
+                          padding: '3px 10px', 
+                          borderRadius: 'var(--radius-full)',
+                          background: 'linear-gradient(135deg, rgba(0,184,148,0.2) 0%, rgba(16,185,129,0.15) 100%)', 
+                          color: '#00b894',
+                          fontWeight: 700,
+                          border: '1px solid rgba(0,184,148,0.3)',
+                          boxShadow: '0 2px 8px rgba(0,184,148,0.2)',
+                          animation: 'glow-pulse 2s ease-in-out infinite'
+                        }}
+                      >
+                        LIVE
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </h4>
+              </div>
             </div>
+
+            <AnimatePresence>
+              {activePipeline && activePipeline.status === 'running' && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  style={{ 
+                    padding: 14, 
+                    marginBottom: 20, 
+                    borderRadius: 'var(--radius-md)', 
+                    background: 'linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(167,139,250,0.08) 100%)', 
+                    border: '1px solid rgba(139,92,246,0.25)',
+                    fontSize: '0.78rem',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6' }} />
+                    <strong style={{ color: '#8b5cf6' }}>Target:</strong> 
+                    <span>{targetName}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#a78bfa' }} />
+                    <strong style={{ color: '#a78bfa' }}>Type:</strong> 
+                    <span>{isClassifier ? 'Classification' : 'Regression'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00b894' }} />
+                    <strong style={{ color: '#00b894' }}>Domain:</strong> 
+                    <span>{activePipeline.results?.domain || 'General'}</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <AnimatePresence mode="wait">
@@ -543,57 +1177,222 @@ export default function Monitoring() {
 
                 {/* 4. Success Output */}
                 {predictionResult && !loading && (
-                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }} 
+                    animate={{ opacity: 1, scale: 1, y: 0 }} 
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
+                  >
                     
                     {/* Glowing result */}
-                    <div style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', background: 'rgba(0,184,148,0.06)', border: '1px solid rgba(0,184,148,0.2)', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,184,148,0.05)' }}>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Predicted {targetName}</div>
-                      <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#00b894' }}>
+                    <motion.div 
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.1, type: "spring", stiffness: 300 }}
+                      style={{ 
+                        padding: '20px 24px', 
+                        borderRadius: 'var(--radius-lg)', 
+                        background: 'linear-gradient(135deg, rgba(0,184,148,0.08) 0%, rgba(16,185,129,0.05) 100%)', 
+                        border: '2px solid rgba(0,184,148,0.2)', 
+                        textAlign: 'center', 
+                        boxShadow: '0 8px 32px rgba(0,184,148,0.15), 0 0 0 1px rgba(0,184,148,0.05)',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {/* Animated background shimmer */}
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: '-100%',
+                        width: '100%',
+                        height: '100%',
+                        background: 'linear-gradient(90deg, transparent, rgba(0,184,148,0.1), transparent)',
+                        animation: 'shimmer 3s ease-in-out infinite'
+                      }} />
+                      
+                      <motion.div 
+                        initial={{ y: 10, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        style={{ 
+                          fontSize: '0.75rem', 
+                          color: 'var(--text-tertiary)', 
+                          fontWeight: 700, 
+                          textTransform: 'uppercase', 
+                          letterSpacing: '0.1em', 
+                          marginBottom: 8,
+                          position: 'relative',
+                          zIndex: 1
+                        }}
+                      >
+                        🎯 Predicted {targetName}
+                      </motion.div>
+                      
+                      <motion.div 
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
+                        style={{ 
+                          fontSize: '2.8rem', 
+                          fontWeight: 900, 
+                          background: 'linear-gradient(135deg, #00b894 0%, #10b981 100%)',
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          backgroundClip: 'text',
+                          position: 'relative',
+                          zIndex: 1,
+                          textShadow: '0 2px 4px rgba(0,184,148,0.2)'
+                        }}
+                      >
                         {formatPredictionValue(predictionResult.prediction)}
-                      </div>
-                    </div>
+                      </motion.div>
+                      
+                      {/* Floating success particles */}
+                      <div style={{ position: 'absolute', top: '20%', left: '15%', width: 4, height: 4, borderRadius: '50%', background: '#00b894', opacity: 0.6, animation: 'float 3s ease-in-out infinite' }} />
+                      <div style={{ position: 'absolute', bottom: '25%', right: '20%', width: 3, height: 3, borderRadius: '50%', background: '#10b981', opacity: 0.4, animation: 'float 4s ease-in-out infinite 1s' }} />
+                    </motion.div>
 
                     {/* Probabilities Distribution (Classification only) */}
-                    {predictionResult.probabilities && Object.keys(predictionResult.probabilities).length > 0 && (
-                      <div>
-                        <h5 style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 12 }}>Probability Distribution</h5>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          {Object.entries(predictionResult.probabilities).map(([classes, prob]) => {
-                            const percent = Math.round(prob * 100);
-                            const active = String(classes) === String(predictionResult.prediction);
-                            return (
-                              <div key={classes} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <span style={{ fontSize: '0.78rem', width: 100, fontWeight: active ? 700 : 500, color: active ? 'var(--text-primary)' : 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {targetName.toLowerCase().includes('member') ? `${classes} Member${Number(classes) > 1 ? 's' : ''}` : classes}
-                                </span>
-                                <div style={{ flex: 1, height: 10, background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-full)', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
-                                  <div style={{ height: '100%', width: `${percent}%`, background: active ? 'var(--gradient-primary)' : 'var(--border-subtle)', borderRadius: 'var(--radius-full)' }} />
-                                </div>
-                                <span style={{ fontSize: '0.78rem', width: 40, textAlign: 'right', fontWeight: active ? 800 : 500, color: active ? '#00b894' : 'var(--text-tertiary)' }}>
-                                  {percent}%
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    <AnimatePresence>
+                      {predictionResult.probabilities && Object.keys(predictionResult.probabilities).length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 20 }}
+                          transition={{ delay: 0.4 }}
+                        >
+                          <motion.h5 
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.5 }}
+                            style={{ 
+                              fontSize: '0.8rem', 
+                              fontWeight: 700, 
+                              color: 'var(--text-tertiary)', 
+                              textTransform: 'uppercase', 
+                              letterSpacing: '0.05em',
+                              marginBottom: 16,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8
+                            }}
+                          >
+                            📊 Probability Distribution
+                          </motion.h5>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {Object.entries(predictionResult.probabilities).map(([classes, prob], idx) => {
+                              const percent = Math.round(prob * 100);
+                              const active = String(classes) === String(predictionResult.prediction);
+                              return (
+                                <motion.div 
+                                  key={classes}
+                                  initial={{ opacity: 0, x: -20 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: 0.6 + idx * 0.1, type: "spring", stiffness: 200 }}
+                                  style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: 14,
+                                    padding: '8px 12px',
+                                    borderRadius: 'var(--radius-md)',
+                                    background: active ? 'rgba(0,184,148,0.05)' : 'transparent',
+                                    border: active ? '1px solid rgba(0,184,148,0.2)' : '1px solid transparent',
+                                    transition: 'all var(--transition-base)'
+                                  }}
+                                >
+                                  <span style={{ 
+                                    fontSize: '0.8rem', 
+                                    width: 120, 
+                                    fontWeight: active ? 700 : 500, 
+                                    color: active ? '#00b894' : 'var(--text-secondary)', 
+                                    whiteSpace: 'nowrap', 
+                                    overflow: 'hidden', 
+                                    textOverflow: 'ellipsis' 
+                                  }}>
+                                    {targetName.toLowerCase().includes('member') ? `${classes} Member${Number(classes) > 1 ? 's' : ''}` : classes}
+                                  </span>
+                                  
+                                  <div style={{ 
+                                    flex: 1, 
+                                    height: 12, 
+                                    background: 'var(--bg-tertiary)', 
+                                    borderRadius: 'var(--radius-full)', 
+                                    overflow: 'hidden', 
+                                    border: '1px solid var(--border-subtle)',
+                                    position: 'relative'
+                                  }}>
+                                    <motion.div 
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${percent}%` }}
+                                      transition={{ delay: 0.7 + idx * 0.1, duration: 0.8, ease: "easeOut" }}
+                                      style={{ 
+                                        height: '100%', 
+                                        background: active ? 
+                                          'linear-gradient(90deg, #00b894 0%, #10b981 100%)' : 
+                                          'linear-gradient(90deg, rgba(0,184,148,0.4) 0%, rgba(16,185,129,0.4) 100%)', 
+                                        borderRadius: 'var(--radius-full)',
+                                        position: 'relative',
+                                        overflow: 'hidden'
+                                      }} 
+                                    >
+                                      {active && (
+                                        <div style={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          left: 0,
+                                          right: 0,
+                                          bottom: 0,
+                                          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                                          animation: 'shimmer 2s ease-in-out infinite'
+                                        }} />
+                                      )}
+                                    </motion.div>
+                                  </div>
+                                  
+                                  <motion.span 
+                                    initial={{ opacity: 0, scale: 0.5 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: 0.8 + idx * 0.1 }}
+                                    style={{ 
+                                      fontSize: '0.8rem', 
+                                      width: 50, 
+                                      textAlign: 'right', 
+                                      fontWeight: active ? 800 : 600, 
+                                      color: active ? '#00b894' : 'var(--text-tertiary)' 
+                                    }}
+                                  >
+                                    {percent}%
+                                  </motion.span>
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
         {/* Live System Performance Telemetry */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
+        <motion.div 
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 32 }}
+        >
           {[
             {
               label: 'Local Serving Model',
               value: serverState === 'connected' ? (serverInfo ? serverInfo.model_name : 'Support Vector Classifier') : '—',
               detail: serverState === 'connected' ? `API Version: ${serverInfo?.model_version || '1.0'}` : 'Offline',
               icon: Cpu,
-              color: '#6c5ce7',
+              color: '#8b5cf6',
             },
             {
               label: 'Real-Time Endpoint Latency',
@@ -612,59 +1411,284 @@ export default function Monitoring() {
           ].map((card, idx) => {
             const Icon = card.icon;
             return (
-              <div key={idx} className="glass-card" style={{ padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: `${card.color}10`, border: `1px solid ${card.color}25`, display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center' }}>
-                  <Icon size={20} color={card.color} />
+              <motion.div 
+                key={idx}
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ delay: 0.7 + idx * 0.1, type: "spring", stiffness: 200 }}
+                whileHover={{ 
+                  y: -5, 
+                  boxShadow: `0 12px 40px ${card.color}20` 
+                }}
+                className="glass-card telemetry-card" 
+                style={{ 
+                  padding: 24, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 18,
+                  cursor: 'pointer',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  borderColor: serverState === 'connected' ? `${card.color}30` : 'var(--border-subtle)'
+                }}
+              >
+                {/* Animated background for connected state */}
+                {serverState === 'connected' && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: '-100%',
+                    width: '100%',
+                    height: '100%',
+                    background: `linear-gradient(90deg, transparent, ${card.color}08, transparent)`,
+                    animation: 'shimmer 4s ease-in-out infinite'
+                  }} />
+                )}
+                
+                <motion.div 
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                  style={{ 
+                    width: 52, 
+                    height: 52, 
+                    borderRadius: 16, 
+                    background: `linear-gradient(135deg, ${card.color}15 0%, ${card.color}08 100%)`, 
+                    border: `2px solid ${card.color}25`, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    position: 'relative',
+                    boxShadow: `0 4px 20px ${card.color}20`
+                  }}
+                >
+                  <Icon size={24} color={card.color} />
+                  
+                  {/* Pulsing ring for active state */}
+                  {serverState === 'connected' && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: -6,
+                      borderRadius: '50%',
+                      border: `2px solid ${card.color}30`,
+                      animation: 'pulse-ring 3s ease-out infinite'
+                    }} />
+                  )}
+                </motion.div>
+                
+                <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
+                  <motion.div 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.8 + idx * 0.1 }}
+                    style={{ 
+                      fontSize: '0.75rem', 
+                      color: 'var(--text-tertiary)', 
+                      fontWeight: 700, 
+                      textTransform: 'uppercase', 
+                      letterSpacing: '0.05em',
+                      marginBottom: 4 
+                    }}
+                  >
+                    {card.label}
+                  </motion.div>
+                  
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.9 + idx * 0.1, type: "spring", stiffness: 200 }}
+                    style={{ 
+                      fontSize: '1.4rem', 
+                      fontWeight: 800, 
+                      color: serverState === 'connected' ? card.color : 'var(--text-tertiary)',
+                      marginBottom: 2,
+                      textShadow: serverState === 'connected' ? `0 2px 8px ${card.color}30` : 'none'
+                    }}
+                  >
+                    {card.value}
+                  </motion.div>
+                  
+                  <motion.div 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 1.0 + idx * 0.1 }}
+                    style={{ 
+                      fontSize: '0.7rem', 
+                      color: 'var(--text-tertiary)', 
+                      lineHeight: 1.3 
+                    }}
+                  >
+                    {card.detail}
+                  </motion.div>
                 </div>
-                <div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>{card.label}</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>{card.value}</div>
-                  <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', marginTop: 2 }}>{card.detail}</div>
-                </div>
-              </div>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
 
         {/* Telemetry Charts */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+        <motion.div 
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+          style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}
+        >
           {/* Latency History */}
-          <div className="glass-card" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h4 style={{ fontWeight: 700, fontSize: '0.85rem' }}>Live Endpoint Latency (ms)</h4>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>Refreshes on prediction</span>
+          <motion.div 
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.9, type: "spring", stiffness: 200 }}
+            className="glass-card chart-card" 
+            style={{ 
+              padding: 28,
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Animated header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <motion.h4 
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 1.0 }}
+                style={{ 
+                  fontWeight: 700, 
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                📈 Live Endpoint Latency (ms)
+              </motion.h4>
+              <motion.span 
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 1.1 }}
+                style={{ 
+                  fontSize: '0.7rem', 
+                  color: 'var(--text-tertiary)',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(108,92,231,0.1)',
+                  border: '1px solid rgba(108,92,231,0.2)'
+                }}
+              >
+                ⚡ Refreshes on prediction
+              </motion.span>
             </div>
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={latencyHistory}>
-                <defs>
-                  <linearGradient id="latGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6c5ce7" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#6c5ce7" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#5a5c72' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fill: '#5a5c72' }} axisLine={false} tickLine={false} label={{ value: 'Latency (ms)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#5a5c72', fontSize: 10 } }} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="value" stroke="#6c5ce7" fill="url(#latGrad)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+            
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 1.2 }}
+            >
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart data={latencyHistory}>
+                  <defs>
+                    <linearGradient id="latGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#6c5ce7" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="#6c5ce7" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis 
+                    dataKey="time" 
+                    tick={{ fontSize: 10, fill: '#64748b' }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#64748b' }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                    label={{ 
+                      value: 'Latency (ms)', 
+                      angle: -90, 
+                      position: 'insideLeft', 
+                      style: { textAnchor: 'middle', fill: '#64748b', fontSize: 11 } 
+                    }} 
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area 
+                    type="monotone" 
+                    dataKey="value" 
+                    stroke="#6c5ce7" 
+                    fill="url(#latGrad)" 
+                    strokeWidth={3}
+                    dot={{ fill: '#6c5ce7', strokeWidth: 2, r: 4 }}
+                    activeDot={{ r: 6, stroke: '#6c5ce7', strokeWidth: 2, fill: '#fff' }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </motion.div>
+          </motion.div>
 
           {/* System Load */}
-          <div className="glass-card" style={{ padding: 24 }}>
-            <h4 style={{ fontWeight: 700, marginBottom: 20, fontSize: '0.85rem' }}>Prediction API Load</h4>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={predictionVolume}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#5a5c72' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fill: '#5a5c72' }} axisLine={false} tickLine={false} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#00cec9" name="API Queries" radius={[3, 3, 0, 0]} opacity={0.8} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+          <motion.div 
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 1.0, type: "spring", stiffness: 200 }}
+            className="glass-card chart-card" 
+            style={{ 
+              padding: 28,
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            <motion.h4 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 1.1 }}
+              style={{ 
+                fontWeight: 700, 
+                marginBottom: 24, 
+                fontSize: '0.9rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}
+            >
+              📊 Prediction API Load
+            </motion.h4>
+            
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 1.2 }}
+            >
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={predictionVolume}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis 
+                    dataKey="time" 
+                    tick={{ fontSize: 10, fill: '#64748b' }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#64748b' }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                  />
+                  <Tooltip />
+                  <Bar 
+                    dataKey="value" 
+                    fill="url(#barGrad)" 
+                    name="API Queries" 
+                    radius={[4, 4, 0, 0]} 
+                    opacity={0.9}
+                  />
+                  <defs>
+                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#00cec9" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#00cec9" stopOpacity={0.6} />
+                    </linearGradient>
+                  </defs>
+                </BarChart>
+              </ResponsiveContainer>
+            </motion.div>
+          </motion.div>
+        </motion.div>
 
       </motion.div>
     </div>

@@ -174,7 +174,8 @@ export default function CodePanel({ codeGenStatus, codeGenMessage, generatedCode
         domain: results?.domain || 'General',
         problemType: results?.problemType || 'regression',
         features: results?.csvMetadata?.features || [],
-        targetCol: results?.csvMetadata?.target || ''
+        targetCol: results?.csvMetadata?.target || '',
+        files: generatedCode.files
       })
     })
       .then(res => res.json())
@@ -196,6 +197,9 @@ export default function CodePanel({ codeGenStatus, codeGenMessage, generatedCode
             clearInterval(interval);
             setCloudDeployUrl(data.endpoint || 'http://localhost:8000/docs');
             setCloudDeployStatus('success');
+            setTimeout(() => {
+              navigate('/monitoring');
+            }, 2500);
           }
         }, 1200);
       })

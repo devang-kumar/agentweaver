@@ -1,103 +1,133 @@
-# Income-Expense Earning Members Classification API
+# Healthcare Classification API
 
-This is a complete, production-grade Machine Learning classification system. It cleans and processes household financial profiles, trains a Support Vector Machine (SVC) classifier to predict the number of earning members in a family, and deploys a fully documented FastAPI server.
+This project provides a REST API for a healthcare classification model that predicts the 'No_of_Earning_Members' based on various household financial and demographic features.
 
-## Project Directory Layout
+## Features
+
+- **Prediction Endpoint (`/predict`)**: Accepts household financial data and returns the predicted number of earning members and the associated probability.
+- **Health Check (`/health`)**: Checks the status of the API and the model.
+- **Metrics (`/metrics`)**: Provides information about the deployed model.
+- **HIPAA Compliance**: Designed with considerations for sensitive data handling (though actual HIPAA compliance requires infrastructure and process validation).
+- **Deployment**: Dockerized for easy deployment on platforms like AWS Lambda (via container image) or Kubernetes.
+
+## Technologies Used
+
+- **Python**: 3.11
+- **FastAPI**: For building the web API.
+- **Pydantic**: For data validation.
+- **Scikit-learn**: For data preprocessing and model training.
+- **LightGBM**: The chosen machine learning model.
+- **Pandas & NumPy**: For data manipulation.
+- **Joblib**: For saving and loading the trained model.
+- **Docker**: For containerization.
+- **Uvicorn**: ASGI server.
+- **pytest**: For testing.
+
+## Project Structure
+
 ```
-generated/
+.
 ├── app/
-│   ├── __init__.py
-│   └── main.py          # FastAPI application server
-├── data/
-│   └── dataset.csv      # Real CSV dataset
-├── model/
-│   └── model.pkl        # Serialized SVM model (created upon training)
-├── tests/
-│   ├── __init__.py
-│   └── test_pipeline.py # Comprehensive Pytest suite
-├── Dockerfile           # Secure container build file
-├── docker-compose.yml   # Multi-service docker orchestration
-├── requirements.txt     # Python dependency list
-├── train.py             # Feature engineering & training script
-└── README.md            # Technical documentation
+│   └── main.py         # FastAPI application
+├── model.pkl           # Trained machine learning model
+├── healthcare_dataset.csv # Dataset
+├── requirements.txt    # Python dependencies
+├── train.py            # Script to train the model
+├── Dockerfile          # Docker configuration
+├── docker-compose.yml  # Docker Compose for local development
+└── tests/
+    └── test_pipeline.py # Pytest test cases
+└── README.md           # This file
 ```
 
----
+## Setup and Running
 
-## 🚀 Setup & Execution (Real-World Pipeline)
+### 1. Prerequisites
 
-Follow these simple steps to run the pipeline, train the model, execute tests, and serve predictions.
+- Docker installed and running.
+- Python 3.11 installed (optional, for local testing without Docker).
 
-### Step 1: Initialize Virtual Environment
-Create and activate a virtual environment to isolate python dependencies:
+### 2. Build and Run with Docker Compose
+
+This is the recommended way to run the application locally.
+
+**Step 1: Train the Model**
+
+Before running the API, you need to train the model and save it as `model.pkl`. Ensure you have the `healthcare_dataset.csv` file in the root directory.
+
 ```bash
-python -m venv venv
-
-# On Windows (PowerShell/CMD)
-.\venv\Scripts\activate
-
-# On Linux/macOS
-source venv/bin/activate
-```
-
-### Step 2: Install Dependencies
-Install all required libraries (FastAPI, Scikit-Learn, Pandas, NumPy, Pytest, Uvicorn, etc.):
-```bash
-pip install -r requirements.txt
-```
-
-### Step 3: Run Model Training Pipeline
-The training script will load your dataset from `data/dataset.csv`, split features, handle scaling and categorical one-hot encoding, run 5-fold cross-validation, and write `model/model.pkl`:
-```bash
+pip install -r requirements.txt # Install dependencies if not using Docker for training
 python train.py
 ```
 
-### Step 4: Run the API Server
-Start the local FastAPI development server:
+**Step 2: Build and Run the Docker Containers**
+
+Navigate to the root directory of the project in your terminal.
+
 ```bash
-uvicorn app.main:app --reload
-```
-*The server will boot up locally at `http://127.0.0.1:8000`.*
-
-### Step 5: Test the API
-You can access a fully interactive **Swagger UI** to send real prediction payloads directly from your browser!
-*   **Swagger API Docs:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-*   **Health Status:** `GET http://127.0.0.1:8000/health`
-*   **Model Info:** `GET http://127.0.0.1:8000/metrics`
-
-#### Example Predict Request Payload (`POST /predict`):
-```json
-{
-  "Mthly_HH_Income": 50000.0,
-  "Mthly_HH_Expense": 20000.0,
-  "No_of_Fly_Members": 4,
-  "Emi_or_Rent_Amt": 5000.0,
-  "Annual_HH_Income": 600000.0,
-  "Highest_Qualified_Member": "Graduate"
-}
-```
-
-### Step 6: Run Test Suite
-To verify model loading and API input-output schema integrity, execute the automated testing suite:
-```bash
-pytest tests/
-```
-
----
-
-## 🐳 Running with Docker / Docker Compose
-
-If you have Docker installed, you can build and start the fully containerized API without configuring python locally:
-```bash
-# Build and launch container
 docker-compose up --build
 ```
-*The API is now served at `http://localhost:8000`.*
 
----
+This command will:
+- Build the Docker image based on the `Dockerfile`.
+- Start the FastAPI application inside a container.
+- Map port 8000 on your host machine to port 8000 in the container.
+- Mount `model.pkl` and `healthcare_dataset.csv` into the container.
 
-## ☁️ Production Deployment on AWS
+### 3. Accessing the API
 
-Because the `Dockerfile` is built to standard container requirements, you can deploy this live on AWS:
-1.  **AWS Elastic Container Registry (ECR):** Build, tag, and push the image to AWS ECR.
-2.  **AWS Lambda (Container Image) or AWS ECS:** Create a new service and select your ECR image. The structured logging, JSON exception handling, and `/health` checkers are built to cloud-native standards!
+Once the containers are running, you can access the API endpoints:
+
+- **Health Check**: `http://localhost:8000/health`
+- **Prediction**: `http://localhost:8000/predict` (POST request with JSON body)
+- **Metrics**: `http://localhost:8000/metrics`
+
+**Example Prediction Request (using `curl`)**:
+
+```bash
+curl -X POST "http://localhost:8000/predict" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "Mthly_HH_Income": 60000.0,
+       "Mthly_HH_Expense": 30000.0,
+       "No_of_Fly_Members": 5,
+       "Emi_or_Rent_Amt": 20000.0,
+       "Annual_HH_Income": 720000.0
+     }'
+```
+
+### 4. Running Tests
+
+To run the automated tests:
+
+```bash
+# Ensure model.pkl is generated first by running python train.py
+python -m pytest tests/test_pipeline.py
+```
+
+Or, if Docker Compose is running:
+
+```bash
+docker-compose exec api pytest tests/test_pipeline.py
+```
+
+### 5. Stopping the Application
+
+To stop the Docker containers:
+
+```bash
+docker-compose down
+```
+
+## Deployment Considerations (AWS Lambda)
+
+To deploy this application on AWS Lambda using a container image:
+
+1.  **Package**: Ensure `model.pkl` and `healthcare_dataset.csv` are included in the build context or uploaded separately.
+2.  **Image**: Build the Docker image.
+3.  **Push**: Push the image to Amazon ECR (Elastic Container Registry).
+4.  **Lambda Function**: Create a Lambda function using the ECR container image. Configure environment variables (like `MODEL_PATH`) and memory/timeout settings appropriately.
+5.  **API Gateway**: Set up an API Gateway to expose the Lambda function as a REST API.
+6.  **HIPAA**: For HIPAA compliance, ensure your AWS environment is configured correctly (e.g., using services within a HIPAA-eligible region, signing a Business Associate Addendum (BAA) with AWS, and implementing appropriate security controls).
+
+**Note**: AWS Lambda has limitations on deployment package size and execution time. For larger models or longer processing times, consider AWS Fargate or SageMaker endpoints.

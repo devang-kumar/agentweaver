@@ -1,21 +1,22 @@
 version: '3.8'
 
 services:
-  ml-api:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
-      - ./model:/app/model  # Mount model directory for persistence
-      - ./data:/app/data    # Mount data directory
+      - ./model.pkl:/app/model.pkl
+      - ./healthcare_dataset.csv:/app/healthcare_dataset.csv
     environment:
-      - MODEL_PATH=/app/model/model.pkl
+      - MODEL_PATH=/app/model.pkl
+      - PYTHONUNBUFFERED=1 # Ensures logs are streamed immediately
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:8000/health || exit 1"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
+      start_period: 30s
       retries: 3
-      start_period: 10s
-    command: uvicorn api_app.main:app --host 0.0.0.0 --port 8000
+
