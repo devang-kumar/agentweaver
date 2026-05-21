@@ -13,10 +13,6 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-6.0-47A248?style=flat-square&logo=mongodb)](https://mongodb.com)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-[Live Demo](#) · [Report Bug](https://github.com/devang-kumar/agentweaver/issues) · [Request Feature](https://github.com/devang-kumar/agentweaver/issues)
-
-![AgentWeaver Dashboard](https://raw.githubusercontent.com/devang-kumar/agentweaver/main/src/assets/hero.png)
-
 </div>
 
 ---
@@ -264,25 +260,6 @@ The Monitoring page connects to your local FastAPI server and lets you:
 - Input feature values via a dynamic form
 - Get real-time predictions with probability scores
 - Monitor latency, throughput, and error rates
-
----
-
-## 📸 Screenshots
-
-### Dashboard
-Pipeline history, agent fleet status, and quick launch.
-
-### Pipeline Orchestration
-Live stage-by-stage execution with real-time logs and training curves.
-
-### Agent Fleet
-9 specialized agents with detailed activity and capability views.
-
-### Monitoring & Playground
-Dynamic prediction form with live inference and telemetry charts.
-
-### Settings
-API key management, cloud configuration, and compliance settings.
 
 ---
 
